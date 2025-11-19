@@ -107,6 +107,13 @@
       transform: none;
     }
 
+    .button-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
     .status {
       margin-top: 15px;
       padding: 12px;
@@ -322,7 +329,10 @@
         <div class="helper-text">Comma-separated or JSON array format</div>
       </div>
 
-      <button id="fetchBtn" onclick="handleFetch()">🚀 Fetch GIFs</button>
+      <div class="button-row">
+        <button id="fetchBtn" onclick="handleFetch()">🚀 Fetch GIFs</button>
+        <button id="exportBtn" onclick="handleExport()" disabled>💾 Export JSON</button>
+      </div>
 
       <div id="status" class="status"></div>
     </div>
@@ -347,11 +357,33 @@
     const TENOR_API_KEY = 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ'; // Replace with your API key
     const CLIENT_KEY = 'gif_classifier_app'; // Client key to identify your app
     const GIFS_PER_KEYWORD = 20;
+    const API_KEY_STORAGE_KEY = 'tenor_gif_classifier_api_key';
 
     // ===== STATE =====
     let allResults = [];
 
     // ===== UTILITY FUNCTIONS =====
+
+    function getStoredApiKey() {
+      try {
+        return localStorage.getItem(API_KEY_STORAGE_KEY) || '';
+      } catch (error) {
+        console.warn('Unable to read API key from storage:', error);
+        return '';
+      }
+    }
+
+    function saveApiKey(value) {
+      try {
+        if (value) {
+          localStorage.setItem(API_KEY_STORAGE_KEY, value);
+        } else {
+          localStorage.removeItem(API_KEY_STORAGE_KEY);
+        }
+      } catch (error) {
+        console.warn('Unable to save API key to storage:', error);
+      }
+    }
 
     /**
      * Parse user input into a clean array of keywords
@@ -518,6 +550,23 @@
       statusEl.style.display = 'none';
     }
 
+    function initializeApiKeyField() {
+      const apiKeyInput = document.getElementById('apiKey');
+      if (!apiKeyInput) return;
+      
+      const storedKey = getStoredApiKey();
+      if (storedKey) {
+        apiKeyInput.value = storedKey;
+      }
+      
+      apiKeyInput.addEventListener('input', (event) => {
+        const value = event.target.value.trim();
+        if (value !== getStoredApiKey()) {
+          saveApiKey(value);
+        }
+      });
+    }
+
     function showResults() {
       document.getElementById('resultsSection').style.display = 'block';
       document.getElementById('emptyState').style.display = 'none';
@@ -526,6 +575,121 @@
     function hideResults() {
       document.getElementById('resultsSection').style.display = 'none';
       document.getElementById('emptyState').style.display = 'block';
+    }
+    
+    function updateExportButtonState() {
+      const exportBtn = document.getElementById('exportBtn');
+      if (exportBtn) {
+        exportBtn.disabled = allResults.length === 0;
+      }
+    }
+    
+    function formatInfoLabel(key) {
+      if (!key) return '';
+      return key.replace(/([A-Z])/g, ' $1')
+        .replace(/^./, c => c.toUpperCase());
+    }
+
+    function formatInfoValue(value) {
+      if (value === null || value === undefined) return '';
+      if (Array.isArray(value) || typeof value === 'object') {
+        try {
+          return JSON.stringify(value);
+        } catch (e) {
+          return String(value);
+        }
+      }
+      return String(value);
+    }
+
+    function buildGifInfoHTML(result) {
+      if (!result || !result.rawData) {
+        return '<span style="color: #999; font-style: italic;">No info</span>';
+      }
+      
+      const candidate = result.rawData.media_formats?.gif
+        || result.rawData.media?.[0]?.gif
+        || result.rawData;
+      
+      const keysToShow = [
+        'id',
+        'sId',
+        'height',
+        'width',
+        'previewHeight',
+        'previewWidth',
+        'previewUrl',
+        'smallHeight',
+        'smallWidth',
+        'smallUrl',
+        'url',
+        'lastUpdated'
+      ];
+      
+      const rows = keysToShow.map(key => {
+        const value = candidate[key] ?? result.rawData[key];
+        if (value === undefined || value === null) return '';
+        return `
+          <div>
+            <strong>${escapeHtml(formatInfoLabel(key))}:</strong>
+            <span>${escapeHtml(formatInfoValue(value))}</span>
+          </div>
+        `;
+      }).filter(Boolean);
+      
+      if (rows.length === 0) {
+        return `<pre style="font-size: 12px; background: #f5f5f5; padding: 8px; border-radius: 4px;">${escapeHtml(JSON.stringify(candidate, null, 2))}</pre>`;
+      }
+      
+      return rows.join('');
+    }
+    
+    function extractDimensions(result) {
+      if (result?.dims?.length === 2) {
+        return {
+          width: result.dims[0],
+          height: result.dims[1]
+        };
+      }
+      
+      const rawDims = result?.rawData?.media_formats?.gif?.dims;
+      if (rawDims?.length === 2) {
+        return {
+          width: rawDims[0],
+          height: rawDims[1]
+        };
+      }
+      
+      return {
+        width: result?.rawData?.width ?? null,
+        height: result?.rawData?.height ?? null
+      };
+    }
+    
+    function getExportUrl(result) {
+      return result?.rawData?.url 
+        || result?.rawData?.media_formats?.gif?.url
+        || result?.gifUrl
+        || '';
+    }
+    
+    function prepareExportData() {
+      return allResults.reduce((acc, result) => {
+        if (!acc[result.keyword]) {
+          acc[result.keyword] = [];
+        }
+        
+        const dims = extractDimensions(result);
+        
+        acc[result.keyword].push({
+          id: result.gifId || result.rawData?.id || '',
+          width: dims.width,
+          height: dims.height,
+          url: getExportUrl(result)
+        });
+        
+        return acc;
+      }, {});
     }
 
     function renderTable(results) {
@@ -551,8 +715,9 @@
       const groupHTML = Object.entries(grouped).map(([keyword, items], groupIdx) => {
         const rowsHTML = items.map(result => {
           const indexLabel = `#${++globalIndex}`;
-          const dimsText = result.dims && result.dims.length === 2
-            ? `${result.dims[0]}×${result.dims[1]}`
+          const dims = extractDimensions(result);
+          const dimsText = (dims.width !== null && dims.height !== null)
+            ? `${dims.width}×${dims.height}`
             : 'N/A';
           return `
             <tr>
@@ -573,9 +738,9 @@
               </td>
               <td>
                 <div class="gif-info">
-                  <div><strong>ID:</strong> ${escapeHtml(result.gifId || 'N/A')}</div>
-                  <div><strong>Dimensions:</strong> ${dimsText}</div>
-                  <div><strong>URL:</strong> <a href="${escapeHtml(result.gifUrl)}" target="_blank" rel="noopener">Open</a></div>
+                  <div style="margin-top: 8px; font-size: 12px; color: #555;">
+                    ${buildGifInfoHTML(result)}
+                  </div>
                 </div>
               </td>
             </tr>
@@ -606,6 +771,7 @@
       }).join('');
       
       container.innerHTML = groupHTML;
+      updateExportButtonState();
     }
 
     function escapeHtml(text) {
@@ -626,6 +792,7 @@
         showStatus('❌ Please enter a Tenor API key', 'error');
         return;
       }
+      saveApiKey(apiKey);
       
       if (!keywordsInput.trim()) {
         showStatus('❌ Please enter at least one keyword', 'error');
@@ -649,6 +816,7 @@
       // Clear previous results
       allResults = [];
       hideResults();
+      updateExportButtonState();
       
       // Show loading state
       fetchBtn.disabled = true;
@@ -707,8 +875,30 @@
       } else {
         hideResults();
         showStatus('❌ No GIFs found. Please check your API key and try different keywords.', 'error');
+        updateExportButtonState();
       }
     }
+    
+    function handleExport() {
+      if (allResults.length === 0) {
+        showStatus('❌ No data to export. Fetch GIFs first.', 'error');
+        return;
+      }
+      
+      const data = prepareExportData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `tenor-gifs-${Date.now()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showStatus('✅ Exported GIF data to JSON file', 'success');
+    }
+
+    initializeApiKeyField();
 
     // Allow Enter key in API key field to trigger fetch
     document.getElementById('apiKey').addEventListener('keypress', (e) => {
@@ -716,6 +906,8 @@
         handleFetch();
       }
     });
+    
+    updateExportButtonState();
   </script>
 </body>
 </html>
