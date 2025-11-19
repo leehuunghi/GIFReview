@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tenor GIF Classifier</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 30px;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    .input-section {
+      background: #f8f9fa;
+      padding: 25px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #333;
+      font-size: 14px;
+    }
+
+    input[type="text"],
+    textarea {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: 'Courier New', monospace;
+      transition: border-color 0.3s;
+    }
+
+    input[type="text"]:focus,
+    textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .status {
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .status.loading {
+      display: block;
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+
+    .status.error {
+      display: block;
+      background: #ffebee;
+      color: #c62828;
+    }
+
+    .status.success {
+      display: block;
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    .results-section {
+      margin-top: 30px;
+    }
+
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .results-header h2 {
+      color: #333;
+      font-size: 22px;
+    }
+
+    .result-count {
+      color: #666;
+      font-size: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    thead {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    th {
+      padding: 15px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    td {
+      padding: 15px;
+      border-bottom: 1px solid #eee;
+      font-size: 14px;
+      vertical-align: top;
+    }
+
+    tbody tr:hover {
+      background: #f8f9fa;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    details.keyword-group {
+      border: 1px solid #eee;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+
+    details.keyword-group summary {
+      cursor: pointer;
+      padding: 15px;
+      font-weight: 600;
+      background: #f5f6ff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      list-style: none;
+    }
+
+    details.keyword-group summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .keyword-summary-title {
+      color: #333;
+    }
+
+    .keyword-summary-count {
+      color: #667eea;
+      font-size: 14px;
+    }
+
+    .gif-preview {
+      width: 120px;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+
+    .tag-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tag {
+      background: #e3f2fd;
+      color: #1976d2;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .index-cell {
+      font-weight: 600;
+      color: #667eea;
+    }
+
+    .keyword-cell {
+      font-weight: 500;
+      color: #764ba2;
+    }
+
+    .gif-info {
+      font-size: 12px;
+      color: #444;
+      line-height: 1.4;
+    }
+
+    .gif-info a {
+      color: #667eea;
+      text-decoration: none;
+    }
+
+    .gif-info a:hover {
+      text-decoration: underline;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #999;
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 15px;
+    }
+
+    .helper-text {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        padding: 20px;
+      }
+      
+      table {
+        font-size: 12px;
+      }
+      
+      .gif-preview {
+        width: 80px;
+        height: 80px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎬 Tenor GIF Classifier</h1>
+    <p class="subtitle">Fetch and classify GIFs from Tenor API</p>
+
+    <div class="input-section">
+      <div class="form-group">
+        <label for="apiKey">Tenor API Key</label>
+        <input type="text" id="apiKey" placeholder="Enter your Tenor API key" value="">
+        <div class="helper-text">Get your API key from <a href="https://developers.google.com/tenor" target="_blank">developers.google.com/tenor</a></div>
+      </div>
+
+      <div class="form-group">
+        <label for="keywords">Keywords</label>
+        <textarea id="keywords" placeholder='Enter keywords: cat, dog, happy birthday&#10;or JSON: ["cat", "dog", "happy birthday"]'>cat, dog, happy</textarea>
+        <div class="helper-text">Comma-separated or JSON array format</div>
+      </div>
+
+      <button id="fetchBtn" onclick="handleFetch()">🚀 Fetch GIFs</button>
+
+      <div id="status" class="status"></div>
+    </div>
+
+    <div class="results-section" id="resultsSection" style="display: none;">
+      <div class="results-header">
+        <h2>Results</h2>
+        <span class="result-count" id="resultCount">0 GIFs found</span>
+      </div>
+      <div id="tableContainer"></div>
+    </div>
+
+    <div id="emptyState" class="empty-state">
+      <div class="empty-state-icon">🎨</div>
+      <h3>No GIFs yet</h3>
+      <p>Enter keywords and click "Fetch GIFs" to get started</p>
+    </div>
+  </div>
+
+  <script>
+    // ===== CONFIGURATION =====
+    const TENOR_API_KEY = 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ'; // Replace with your API key
+    const CLIENT_KEY = 'gif_classifier_app'; // Client key to identify your app
+    const GIFS_PER_KEYWORD = 20;
+
+    // ===== STATE =====
+    let allResults = [];
+
+    // ===== UTILITY FUNCTIONS =====
+
+    /**
+     * Parse user input into a clean array of keywords
+     * Supports: "cat, dog, bird" or ["cat", "dog", "bird"]
+     */
+    function parseKeywords(input) {
+      input = input.trim();
+      
+      // Try JSON array format first
+      if (input.startsWith('[') && input.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(input);
+          if (Array.isArray(parsed)) {
+            return parsed
+              .map(k => String(k).trim())
+              .filter(k => k.length > 0);
+          }
+        } catch (e) {
+          console.warn('Invalid JSON format, falling back to comma-separated');
+        }
+      }
+      
+      // Comma-separated format
+      return input
+        .split(',')
+        .map(k => k.trim())
+        .filter(k => k.length > 0);
+    }
+
+    /**
+     * Fetch 20 newest GIFs from Tenor for a given keyword
+     * Following Google's official Tenor API guide
+     */
+    async function fetchGifsForKeyword(keyword, apiKey) {
+      // Build URL following Google's guide format
+      const search_url = "https://tenor.googleapis.com/v2/search?q=" + encodeURIComponent(keyword) + 
+                        "&key=" + apiKey + 
+                        "&client_key=" + CLIENT_KEY + 
+                        "&limit=" + GIFS_PER_KEYWORD;
+      
+      console.log(`========== FETCHING "${keyword}" ==========`);
+      console.log(`Request URL: ${search_url}`);
+      
+      const response = await fetch(search_url);
+      
+      console.log(`Response status: ${response.status} ${response.statusText}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`API Error Response:`, errorText);
+        throw new Error(`Tenor API error: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // DETAILED DEBUGGING
+      console.log(`✓ API returned data:`, {
+        hasResults: !!data.results,
+        resultsIsArray: Array.isArray(data.results),
+        resultsLength: data.results ? data.results.length : 0,
+        firstGifId: data.results && data.results[0] ? data.results[0].id : 'N/A',
+        firstGifHasMediaFormats: data.results && data.results[0] ? !!data.results[0].media_formats : false,
+        firstGifHasGif: data.results && data.results[0] && data.results[0].media_formats ? !!data.results[0].media_formats.gif : false,
+        firstGifUrl: data.results && data.results[0] && data.results[0].media_formats && data.results[0].media_formats.gif ? data.results[0].media_formats.gif.url : 'N/A'
+      });
+      
+      if (data.results && data.results.length > 0) {
+        console.log(`Sample first GIF:`, data.results[0]);
+      }
+      
+      console.log(`========================================`);
+      
+      return data.results || [];
+    }
+
+    /**
+     * Classify a GIF by extracting and normalizing tags from its metadata
+     * Returns an array of tags: ["cat", "funny", "meme"]
+     */
+    function classifyGif(gifData) {
+      const tags = new Set();
+      
+      // Extract from content_description (Tenor provides this)
+      if (gifData.content_description) {
+        const words = gifData.content_description
+          .toLowerCase()
+          .replace(/[^\w\s]/g, ' ')
+          .split(/\s+/)
+          .filter(w => w.length > 2); // Remove very short words
+        
+        words.forEach(w => tags.add(w));
+      }
+      
+      // Extract from tags array if available
+      if (gifData.tags && Array.isArray(gifData.tags)) {
+        gifData.tags.forEach(tag => {
+          const normalized = tag.toLowerCase().trim();
+          if (normalized.length > 2) {
+            tags.add(normalized);
+          }
+        });
+      }
+      
+      // Extract from h1_title if available
+      if (gifData.h1_title) {
+        const words = gifData.h1_title
+          .toLowerCase()
+          .replace(/[^\w\s]/g, ' ')
+          .split(/\s+/)
+          .filter(w => w.length > 2);
+        
+        words.forEach(w => tags.add(w));
+      }
+      
+      // Remove common stopwords
+      const stopwords = ['the', 'and', 'for', 'with', 'this', 'that', 'from', 'are', 'was', 'been', 'have', 'has'];
+      stopwords.forEach(sw => tags.delete(sw));
+      
+      return Array.from(tags).slice(0, 10); // Limit to 10 tags max
+    }
+
+    /**
+     * Get the GIF URL from Tenor response
+     * Following the data structure: media_formats.gif.url
+     */
+    function getGifUrl(gifData) {
+      // Log the structure for debugging
+      console.log('GIF Data:', {
+        id: gifData.id,
+        title: gifData.title,
+        hasMediaFormats: !!gifData.media_formats,
+        hasGif: !!gifData.media_formats?.gif,
+        gifUrl: gifData.media_formats?.gif?.url
+      });
+      
+      // Primary: Get the full GIF format
+      if (gifData.media_formats && gifData.media_formats.gif && gifData.media_formats.gif.url) {
+        return gifData.media_formats.gif.url;
+      }
+      
+      // Fallback: Try smaller formats if gif is not available
+      if (gifData.media_formats && gifData.media_formats.tinygif && gifData.media_formats.tinygif.url) {
+        return gifData.media_formats.tinygif.url;
+      }
+      
+      if (gifData.media_formats && gifData.media_formats.nanogif && gifData.media_formats.nanogif.url) {
+        return gifData.media_formats.nanogif.url;
+      }
+      
+      console.warn('No GIF URL found for:', gifData.id);
+      return '';
+    }
+
+    // ===== UI FUNCTIONS =====
+
+    function showStatus(message, type) {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = message;
+      statusEl.className = `status ${type}`;
+    }
+
+    function hideStatus() {
+      const statusEl = document.getElementById('status');
+      statusEl.style.display = 'none';
+    }
+
+    function showResults() {
+      document.getElementById('resultsSection').style.display = 'block';
+      document.getElementById('emptyState').style.display = 'none';
+    }
+
+    function hideResults() {
+      document.getElementById('resultsSection').style.display = 'none';
+      document.getElementById('emptyState').style.display = 'block';
+    }
+
+    function renderTable(results) {
+      const container = document.getElementById('tableContainer');
+      const countEl = document.getElementById('resultCount');
+      
+      countEl.textContent = `${results.length} GIF${results.length !== 1 ? 's' : ''} found`;
+      
+      if (results.length === 0) {
+        container.innerHTML = '<p class="empty-state">No GIFs found. Try different keywords.</p>';
+        return;
+      }
+      
+      const grouped = results.reduce((acc, result) => {
+        if (!acc[result.keyword]) {
+          acc[result.keyword] = [];
+        }
+        acc[result.keyword].push(result);
+        return acc;
+      }, {});
+
+      let globalIndex = 0;
+      const groupHTML = Object.entries(grouped).map(([keyword, items], groupIdx) => {
+        const rowsHTML = items.map(result => {
+          const indexLabel = `#${++globalIndex}`;
+          const dimsText = result.dims && result.dims.length === 2
+            ? `${result.dims[0]}×${result.dims[1]}`
+            : 'N/A';
+          return `
+            <tr>
+              <td class="index-cell">${indexLabel}</td>
+              <td>
+                <img src="${escapeHtml(result.gifUrl)}" 
+                     alt="GIF for ${escapeHtml(result.keyword)}" 
+                     class="gif-preview"
+                     loading="lazy">
+              </td>
+              <td>
+                <div class="tag-container">
+                  ${result.tags.length > 0 
+                    ? result.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')
+                    : '<span style="color: #999; font-style: italic;">No tags</span>'
+                  }
+                </div>
+              </td>
+              <td>
+                <div class="gif-info">
+                  <div><strong>ID:</strong> ${escapeHtml(result.gifId || 'N/A')}</div>
+                  <div><strong>Dimensions:</strong> ${dimsText}</div>
+                  <div><strong>URL:</strong> <a href="${escapeHtml(result.gifUrl)}" target="_blank" rel="noopener">Open</a></div>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        return `
+          <details class="keyword-group" ${groupIdx === 0 ? 'open' : ''}>
+            <summary>
+              <span class="keyword-summary-title">${escapeHtml(keyword)}</span>
+              <span class="keyword-summary-count">${items.length} GIF${items.length !== 1 ? 's' : ''}</span>
+            </summary>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 80px;">Index</th>
+                  <th style="width: 160px;">GIF</th>
+                  <th>GIF Tags</th>
+                  <th style="width: 240px;">GIF Info</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHTML}
+              </tbody>
+            </table>
+          </details>
+        `;
+      }).join('');
+      
+      container.innerHTML = groupHTML;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ===== MAIN FETCH HANDLER =====
+
+    async function handleFetch() {
+      const apiKey = document.getElementById('apiKey').value.trim();
+      const keywordsInput = document.getElementById('keywords').value;
+      const fetchBtn = document.getElementById('fetchBtn');
+      
+      // Validation
+      if (!apiKey) {
+        showStatus('❌ Please enter a Tenor API key', 'error');
+        return;
+      }
+      
+      if (!keywordsInput.trim()) {
+        showStatus('❌ Please enter at least one keyword', 'error');
+        return;
+      }
+      
+      // Parse keywords
+      let keywords;
+      try {
+        keywords = parseKeywords(keywordsInput);
+      } catch (e) {
+        showStatus('❌ Invalid keyword format. Use comma-separated or JSON array.', 'error');
+        return;
+      }
+      
+      if (keywords.length === 0) {
+        showStatus('❌ No valid keywords found', 'error');
+        return;
+      }
+      
+      // Clear previous results
+      allResults = [];
+      hideResults();
+      
+      // Show loading state
+      fetchBtn.disabled = true;
+      showStatus(`⏳ Fetching GIFs for ${keywords.length} keyword${keywords.length !== 1 ? 's' : ''}...`, 'loading');
+      
+      // Fetch GIFs for each keyword
+      let successCount = 0;
+      let errorCount = 0;
+      
+      for (const keyword of keywords) {
+        try {
+          const gifs = await fetchGifsForKeyword(keyword, apiKey);
+          
+          console.log(`Processing ${gifs.length} GIFs for keyword: "${keyword}"`);
+          
+          // Process each GIF
+          let processedCount = 0;
+          for (const gif of gifs) {
+            const gifUrl = getGifUrl(gif);
+            if (gifUrl) {
+              const tags = classifyGif(gif);
+              
+              allResults.push({
+                keyword: keyword,
+                gifUrl: gifUrl,
+                gifId: gif.id,
+                title: gif.title || 'Untitled',
+                dims: gif.media_formats?.gif?.dims || [],
+                tags: tags,
+                rawData: gif
+              });
+              processedCount++;
+            } else {
+              console.warn(`Skipping GIF ${gif.id} - no valid URL found`);
+            }
+          }
+          
+          successCount++;
+          console.log(`✓ Successfully processed ${processedCount} out of ${gifs.length} GIFs for "${keyword}"`);
+          
+        } catch (error) {
+          errorCount++;
+          console.error(`✗ Error fetching GIFs for "${keyword}":`, error);
+          showStatus(`⚠️ Error fetching "${keyword}": ${error.message}`, 'error');
+        }
+      }
+      
+      // Re-enable button
+      fetchBtn.disabled = false;
+      
+      // Show results
+      if (allResults.length > 0) {
+        renderTable(allResults);
+        showResults();
+        showStatus(`✅ Successfully fetched ${allResults.length} GIFs from ${successCount} keyword${successCount !== 1 ? 's' : ''}`, 'success');
+      } else {
+        hideResults();
+        showStatus('❌ No GIFs found. Please check your API key and try different keywords.', 'error');
+      }
+    }
+
+    // Allow Enter key in API key field to trigger fetch
+    document.getElementById('apiKey').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        handleFetch();
+      }
+    });
+  </script>
+</body>
+</html>
