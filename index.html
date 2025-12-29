@@ -299,15 +299,172 @@
       .container {
         padding: 20px;
       }
-      
+
       table {
         font-size: 12px;
       }
-      
+
       .gif-preview {
         width: 80px;
         height: 80px;
       }
+    }
+
+    /* Crop Button */
+    .gif-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .crop-btn {
+      padding: 6px 12px;
+      font-size: 12px;
+      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    }
+
+    .crop-btn:hover {
+      box-shadow: 0 3px 10px rgba(40, 167, 69, 0.4);
+    }
+
+    /* Crop Modal Overlay */
+    .crop-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .crop-modal.active {
+      display: flex;
+    }
+
+    .crop-container {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 90vw;
+      max-height: 90vh;
+      overflow: auto;
+    }
+
+    .crop-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .crop-header h3 {
+      color: #333;
+      font-size: 18px;
+    }
+
+    .crop-reset-btn {
+      background: #dc3545;
+      padding: 8px 16px;
+      font-size: 14px;
+    }
+
+    .crop-reset-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    /* Crop Canvas Area */
+    .crop-canvas-container {
+      position: relative;
+      display: inline-block;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: crosshair;
+    }
+
+    .crop-canvas {
+      display: block;
+      max-width: 100%;
+    }
+
+    .crop-selection {
+      position: absolute;
+      border: 2px dashed #667eea;
+      background: rgba(102, 126, 234, 0.2);
+      cursor: grab;
+      pointer-events: auto;
+    }
+
+    /* Crop Preview */
+    .crop-preview-section {
+      margin-top: 16px;
+      padding: 16px;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+
+    .crop-preview-canvas {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      width: 150px;
+      height: 150px;
+    }
+
+    .preview-gif-container {
+      display: inline-block;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      width: 150px;
+      height: 150px;
+    }
+
+    .preview-gif-container img {
+      position: absolute;
+    }
+
+    /* Crop Actions */
+    .crop-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      justify-content: flex-end;
+    }
+
+    .crop-confirm-btn {
+      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    }
+
+    .crop-cancel-btn {
+      background: #6c757d;
+    }
+
+    /* Cropped Thumbnail Indicator */
+    .cropped-thumb {
+      border: 2px solid #28a745;
+    }
+
+    .thumb-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+
+    .cropped-badge {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      background: #28a745;
+      color: white;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 10px;
     }
   </style>
 </head>
@@ -352,6 +509,33 @@
     </div>
   </div>
 
+  <!-- Crop Modal -->
+  <div id="cropModal" class="crop-modal">
+    <div class="crop-container">
+      <div class="crop-header">
+        <h3>Crop GIF Thumbnail</h3>
+        <button id="resetCropBtn" class="crop-reset-btn" onclick="resetCrop()" disabled>Reset</button>
+      </div>
+
+      <div class="crop-canvas-container" id="cropCanvasContainer">
+        <canvas id="cropCanvas" class="crop-canvas"></canvas>
+        <div id="cropSelection" class="crop-selection"></div>
+      </div>
+
+      <div class="crop-preview-section">
+        <label>Preview (Animated):</label>
+        <div id="previewGifContainer" class="preview-gif-container">
+          <img id="previewGifImg" src="" alt="Preview">
+        </div>
+      </div>
+
+      <div class="crop-actions">
+        <button class="crop-cancel-btn" onclick="closeCropModal()">Cancel</button>
+        <button class="crop-confirm-btn" onclick="confirmCrop()">Confirm Crop</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ===== CONFIGURATION =====
     const TENOR_API_KEY = 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ'; // Replace with your API key
@@ -361,6 +545,17 @@
 
     // ===== STATE =====
     let allResults = [];
+
+    // ===== CROP STATE =====
+    let currentCropGifId = null;
+    let currentGifUrl = null;
+    let gifWidth = 0;
+    let gifHeight = 0;
+    let cropSelection = { x: 0, y: 0, size: 100 };
+    let isDragging = false;
+    let isMoving = false;
+    let dragStart = { x: 0, y: 0 };
+    let moveStart = { x: 0, y: 0, selX: 0, selY: 0 };
 
     // ===== UTILITY FUNCTIONS =====
 
@@ -606,11 +801,11 @@
       if (!result || !result.rawData) {
         return '<span style="color: #999; font-style: italic;">No info</span>';
       }
-      
+
       const candidate = result.rawData.media_formats?.gif
         || result.rawData.media?.[0]?.gif
         || result.rawData;
-      
+
       const keysToShow = [
         'id',
         'sId',
@@ -625,7 +820,7 @@
         'url',
         'lastUpdated'
       ];
-      
+
       const rows = keysToShow.map(key => {
         const value = candidate[key] ?? result.rawData[key];
         if (value === undefined || value === null) return '';
@@ -636,11 +831,25 @@
           </div>
         `;
       }).filter(Boolean);
-      
+
+      // Add crop rect info if cropped
+      if (result.cropData) {
+        const cropInfo = `
+          <div style="margin-top: 8px; padding: 8px; background: #e8f5e9; border-radius: 4px; border-left: 3px solid #28a745;">
+            <strong style="color: #28a745;">Crop Rect:</strong>
+            <div style="margin-top: 4px; font-family: monospace; font-size: 11px;">
+              x: ${Math.round(result.cropData.x)}, y: ${Math.round(result.cropData.y)}<br>
+              size: ${Math.round(result.cropData.size)}×${Math.round(result.cropData.size)}
+            </div>
+          </div>
+        `;
+        rows.push(cropInfo);
+      }
+
       if (rows.length === 0) {
         return `<pre style="font-size: 12px; background: #f5f5f5; padding: 8px; border-radius: 4px;">${escapeHtml(JSON.stringify(candidate, null, 2))}</pre>`;
       }
-      
+
       return rows.join('');
     }
     
@@ -685,7 +894,8 @@
           id: result.gifId || result.rawData?.id || '',
           width: dims.width,
           height: dims.height,
-          url: getExportUrl(result)
+          url: getExportUrl(result),
+          cropData: result.cropData || null
         });
         
         return acc;
@@ -722,11 +932,11 @@
           return `
             <tr>
               <td class="index-cell">${indexLabel}</td>
-              <td>
-                <img src="${escapeHtml(result.gifUrl)}" 
-                     alt="GIF for ${escapeHtml(result.keyword)}" 
-                     class="gif-preview"
-                     loading="lazy">
+              <td class="gif-cell">
+                ${getCroppedThumbHTML(result)}
+                <button class="crop-btn" onclick="openCropModal('${escapeHtml(result.gifId)}')">
+                  Crop
+                </button>
               </td>
               <td>
                 <div class="tag-container">
@@ -908,6 +1118,274 @@
     });
     
     updateExportButtonState();
+
+    // ===== CROP FUNCTIONS =====
+
+    function openCropModal(gifId) {
+      currentCropGifId = gifId;
+      const result = allResults.find(r => r.gifId === gifId);
+      if (!result) return;
+
+      currentGifUrl = result.gifUrl;
+
+      // Update reset button state
+      const resetBtn = document.getElementById('resetCropBtn');
+      resetBtn.disabled = !result.cropData;
+
+      document.getElementById('cropModal').classList.add('active');
+      loadGifImage(result.gifUrl).then(() => {
+        setupCropInteraction();
+      });
+    }
+
+    function closeCropModal() {
+      document.getElementById('cropModal').classList.remove('active');
+      currentCropGifId = null;
+      currentGifUrl = null;
+    }
+
+    async function loadGifImage(gifUrl) {
+      const canvas = document.getElementById('cropCanvas');
+      const ctx = canvas.getContext('2d');
+
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      return new Promise((resolve, reject) => {
+        img.onload = function() {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          gifWidth = img.width;
+          gifHeight = img.height;
+          ctx.drawImage(img, 0, 0);
+
+          // Initialize crop selection to center square
+          const size = Math.min(img.width, img.height) * 0.5;
+          cropSelection = {
+            x: (img.width - size) / 2,
+            y: (img.height - size) / 2,
+            size: size
+          };
+          updateCropSelection();
+          updateCropPreview();
+          resolve();
+        };
+        img.onerror = function() {
+          showStatus('Failed to load image for cropping', 'error');
+          reject(new Error('Failed to load image'));
+        };
+        img.src = gifUrl;
+      });
+    }
+
+    function isPointInSelection(x, y) {
+      return x >= cropSelection.x &&
+             x <= cropSelection.x + cropSelection.size &&
+             y >= cropSelection.y &&
+             y <= cropSelection.y + cropSelection.size;
+    }
+
+    function setupCropInteraction() {
+      const container = document.getElementById('cropCanvasContainer');
+      const canvas = document.getElementById('cropCanvas');
+      const selection = document.getElementById('cropSelection');
+
+      container.onmousedown = function(e) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        const clickX = (e.clientX - rect.left) * scaleX;
+        const clickY = (e.clientY - rect.top) * scaleY;
+
+        // Check if clicking inside existing selection (to move it)
+        if (isPointInSelection(clickX, clickY)) {
+          isMoving = true;
+          isDragging = false;
+          moveStart = {
+            x: clickX,
+            y: clickY,
+            selX: cropSelection.x,
+            selY: cropSelection.y
+          };
+          selection.style.cursor = 'grabbing';
+        } else {
+          // Start new selection
+          isDragging = true;
+          isMoving = false;
+          dragStart = { x: clickX, y: clickY };
+        }
+      };
+
+      container.onmousemove = function(e) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        const currentX = (e.clientX - rect.left) * scaleX;
+        const currentY = (e.clientY - rect.top) * scaleY;
+
+        // Update cursor based on hover
+        if (!isDragging && !isMoving) {
+          if (isPointInSelection(currentX, currentY)) {
+            selection.style.cursor = 'grab';
+          } else {
+            selection.style.cursor = 'crosshair';
+          }
+        }
+
+        if (isMoving) {
+          // Move existing selection
+          const deltaX = currentX - moveStart.x;
+          const deltaY = currentY - moveStart.y;
+
+          let newX = moveStart.selX + deltaX;
+          let newY = moveStart.selY + deltaY;
+
+          // Constrain to canvas bounds
+          newX = Math.max(0, Math.min(newX, canvas.width - cropSelection.size));
+          newY = Math.max(0, Math.min(newY, canvas.height - cropSelection.size));
+
+          cropSelection.x = newX;
+          cropSelection.y = newY;
+
+          updateCropSelection();
+          updateCropPreview();
+        } else if (isDragging) {
+          // Create new selection
+          const deltaX = Math.abs(currentX - dragStart.x);
+          const deltaY = Math.abs(currentY - dragStart.y);
+          const size = Math.max(deltaX, deltaY);
+
+          let x = currentX < dragStart.x ? dragStart.x - size : dragStart.x;
+          let y = currentY < dragStart.y ? dragStart.y - size : dragStart.y;
+
+          // Constrain to canvas bounds
+          x = Math.max(0, Math.min(x, canvas.width - size));
+          y = Math.max(0, Math.min(y, canvas.height - size));
+          const constrainedSize = Math.min(size, canvas.width - x, canvas.height - y);
+
+          cropSelection = {
+            x: x,
+            y: y,
+            size: constrainedSize
+          };
+
+          updateCropSelection();
+          updateCropPreview();
+        }
+      };
+
+      container.onmouseup = function() {
+        isDragging = false;
+        isMoving = false;
+        selection.style.cursor = 'grab';
+      };
+
+      container.onmouseleave = function() {
+        isDragging = false;
+        isMoving = false;
+      };
+    }
+
+    function updateCropSelection() {
+      const canvas = document.getElementById('cropCanvas');
+      const selection = document.getElementById('cropSelection');
+      const rect = canvas.getBoundingClientRect();
+
+      const scaleX = rect.width / canvas.width;
+      const scaleY = rect.height / canvas.height;
+
+      selection.style.left = (cropSelection.x * scaleX) + 'px';
+      selection.style.top = (cropSelection.y * scaleY) + 'px';
+      selection.style.width = (cropSelection.size * scaleX) + 'px';
+      selection.style.height = (cropSelection.size * scaleY) + 'px';
+    }
+
+    function updateCropPreview() {
+      if (!currentGifUrl) return;
+
+      const previewContainer = document.getElementById('previewGifContainer');
+      const previewImg = document.getElementById('previewGifImg');
+
+      // Calculate scale to fit the crop area into 150x150 preview
+      const previewSize = 150;
+      const scale = previewSize / cropSelection.size;
+
+      // Set the image to the original GIF (animated)
+      previewImg.src = currentGifUrl;
+      previewImg.style.width = (gifWidth * scale) + 'px';
+      previewImg.style.height = (gifHeight * scale) + 'px';
+      previewImg.style.left = (-cropSelection.x * scale) + 'px';
+      previewImg.style.top = (-cropSelection.y * scale) + 'px';
+    }
+
+    function confirmCrop() {
+      if (!currentCropGifId) return;
+
+      // Save crop data to the result
+      const resultIndex = allResults.findIndex(r => r.gifId === currentCropGifId);
+      if (resultIndex !== -1) {
+        allResults[resultIndex].cropData = {
+          x: cropSelection.x,
+          y: cropSelection.y,
+          size: cropSelection.size,
+          gifWidth: gifWidth,
+          gifHeight: gifHeight
+        };
+
+        // Update the display
+        renderTable(allResults);
+        showStatus('Crop saved successfully!', 'success');
+      }
+
+      closeCropModal();
+    }
+
+    function resetCrop() {
+      if (!currentCropGifId) return;
+
+      const resultIndex = allResults.findIndex(r => r.gifId === currentCropGifId);
+      if (resultIndex !== -1) {
+        // Clear crop data
+        delete allResults[resultIndex].cropData;
+
+        // Update the display
+        renderTable(allResults);
+        showStatus('Crop reset successfully!', 'success');
+      }
+
+      closeCropModal();
+    }
+
+    function getCroppedThumbHTML(result) {
+      if (result.cropData) {
+        // Create a container that clips the GIF to show only the cropped area
+        const previewSize = 120;
+        const scale = previewSize / result.cropData.size;
+        const imgWidth = result.cropData.gifWidth * scale;
+        const imgHeight = result.cropData.gifHeight * scale;
+        const offsetX = -result.cropData.x * scale;
+        const offsetY = -result.cropData.y * scale;
+
+        return `
+          <div class="thumb-wrapper">
+            <div style="width: ${previewSize}px; height: ${previewSize}px; overflow: hidden; position: relative; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+              <img src="${escapeHtml(result.gifUrl)}"
+                   alt="Cropped GIF"
+                   style="position: absolute; width: ${imgWidth}px; height: ${imgHeight}px; left: ${offsetX}px; top: ${offsetY}px;">
+            </div>
+            <span class="cropped-badge">Cropped</span>
+          </div>
+        `;
+      }
+      return `
+        <img src="${escapeHtml(result.gifUrl)}"
+             alt="GIF for ${escapeHtml(result.keyword)}"
+             class="gif-preview"
+             loading="lazy">
+      `;
+    }
   </script>
 </body>
 </html>
